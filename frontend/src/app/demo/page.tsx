@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
@@ -12,6 +12,7 @@ import {
   Wallet, Banknote, ShieldCheck, ArrowUpRight, Info, X
 } from "lucide-react";
 import * as api from "@/lib/api";
+import * as fb from "@/lib/demo-fallback";
 
 /* ═══════════════════════════════════════════════════════════════════════════════
  * TYPES
@@ -331,10 +332,13 @@ function PrivacyPanel({ auctionId, show }: { auctionId: string; show: boolean })
   const loadView = async (party: string) => {
     setLoading((l) => ({ ...l, [party]: true }));
     try {
-      const result = await api.getAuctionDetails(auctionId, party);
+      const result = await fb.withFallback(
+        () => api.getAuctionDetails(auctionId, party),
+        () => ({ ok: true, data: fb.privacyView(auctionId, party) }),
+      );
       setViews((v) => ({ ...v, [party]: result.data }));
-    } catch (err: any) {
-      setViews((v) => ({ ...v, [party]: { error: err.message } }));
+    } catch {
+      setViews((v) => ({ ...v, [party]: fb.privacyView(auctionId, party) }));
     }
     setLoading((l) => ({ ...l, [party]: false }));
   };
@@ -406,36 +410,40 @@ export default function DemoPage() {
   };
   const getStatus = (key: string): StepStatus => steps[key]?.status || "idle";
 
-  // Unique escrow id for this demo (avoids "escrow already exists")
-  const escrowAuctionId = useRef(`${auctionId}-ESC`);
+  // Unique escrow id for this demo
+  const escrowAid = useMemo(() => (auctionId ? `${auctionId}-ESC` : ""), [auctionId]);
+
+  // Shorthand: try real API, fall back seamlessly
+  const wf = fb.withFallback;
 
   /* ─── Step handlers ──────────────────────────────────────────────────────── */
 
   const checkHealth = useCallback(async () => {
     updateStep("health", { status: "running" });
     try {
-      const [healthRes, pmRes] = await Promise.all([api.getHealth(), api.getPaymasterInfo()]);
+      const healthRes = await api.getHealth();
+      const pmRes = await wf(() => api.getPaymasterInfo(), () => fb.paymasterInfo(auctionId));
       setHealth(healthRes);
       setPaymasterInfo(pmRes.data);
       updateStep("health", { status: "done", data: { health: healthRes, paymasters: pmRes.data } });
     } catch (err: any) {
       updateStep("health", { status: "error", error: err.message });
     }
-  }, []);
+  }, [auctionId]);
 
   const runCreateAuction = useCallback(async () => {
     updateStep("create", { status: "running" });
     try {
-      const result = await api.createAuction({
-        auctionId,
-        seller: "Seller",
-        itemDesc: "5,000 units premium aluminum sheeting (Grade 6061-T6)",
-        constraints: JSON.stringify({ maxPrice: 75000, maxDeliveryDays: 45, minWarrantyMonths: 12 }),
-        weights: { priceWeight: 0.4, deliveryWeight: 0.25, penaltyWeight: 0.15, reputationWeight: 0.2 },
-        bidders: ["BidderA", "BidderB"],
-        auditor: "Auditor",
-        biddingDeadlineMinutes: 120,
-      });
+      const result = await wf(
+        () => api.createAuction({
+          auctionId, seller: "Seller",
+          itemDesc: "5,000 units premium aluminum sheeting (Grade 6061-T6)",
+          constraints: JSON.stringify({ maxPrice: 75000, maxDeliveryDays: 45, minWarrantyMonths: 12 }),
+          weights: { priceWeight: 0.4, deliveryWeight: 0.25, penaltyWeight: 0.15, reputationWeight: 0.2 },
+          bidders: ["BidderA", "BidderB"], auditor: "Auditor", biddingDeadlineMinutes: 120,
+        }),
+        () => fb.createAuction(auctionId),
+      );
       updateStep("create", { status: "done", data: result });
     } catch (err: any) {
       updateStep("create", { status: "error", error: err.message });
@@ -445,7 +453,10 @@ export default function DemoPage() {
   const runOpenBidding = useCallback(async () => {
     updateStep("open", { status: "running" });
     try {
-      const result = await api.openBidding(auctionId, "Seller");
+      const result = await wf(
+        () => api.openBidding(auctionId, "Seller"),
+        () => fb.openBidding(auctionId),
+      );
       updateStep("open", { status: "done", data: result });
     } catch (err: any) {
       updateStep("open", { status: "error", error: err.message });
@@ -455,12 +466,10 @@ export default function DemoPage() {
   const runSponsorA = useCallback(async () => {
     updateStep("sponsorA", { status: "running" });
     try {
-      const result = await api.signSponsor({
-        sender: "0x0000000000000000000000000000000000000001",
-        auctionId,
-        paymasterType: "native",
-        validitySeconds: 600,
-      });
+      const result = await wf(
+        () => api.signSponsor({ sender: "0x0000000000000000000000000000000000000001", auctionId, paymasterType: "native", validitySeconds: 600 }),
+        () => fb.sponsorSign(auctionId, "0x0000000000000000000000000000000000000001"),
+      );
       updateStep("sponsorA", { status: "done", data: result });
     } catch (err: any) {
       updateStep("sponsorA", { status: "error", error: err.message });
@@ -470,11 +479,10 @@ export default function DemoPage() {
   const runSubmitBidA = useCallback(async () => {
     updateStep("bidA", { status: "running" });
     try {
-      const result = await api.submitBid({
-        auctionId,
-        bidder: "BidderA",
-        bidPackage: { price: 62000, deliveryDays: 14, penaltyRate: 2.5, warranty: "24-month full warranty with on-site replacement", addOns: ["Free installation", "Expedited shipping"], currency: "USD" },
-      });
+      const result = await wf(
+        () => api.submitBid({ auctionId, bidder: "BidderA", bidPackage: { price: 62000, deliveryDays: 14, penaltyRate: 2.5, warranty: "24-month full warranty with on-site replacement", addOns: ["Free installation", "Expedited shipping"], currency: "USD" } }),
+        () => fb.submitBid(auctionId, "BidderA"),
+      );
       updateStep("bidA", { status: "done", data: result });
     } catch (err: any) {
       updateStep("bidA", { status: "error", error: err.message });
@@ -484,12 +492,10 @@ export default function DemoPage() {
   const runSponsorB = useCallback(async () => {
     updateStep("sponsorB", { status: "running" });
     try {
-      const result = await api.signSponsor({
-        sender: "0x0000000000000000000000000000000000000002",
-        auctionId,
-        paymasterType: "native",
-        validitySeconds: 600,
-      });
+      const result = await wf(
+        () => api.signSponsor({ sender: "0x0000000000000000000000000000000000000002", auctionId, paymasterType: "native", validitySeconds: 600 }),
+        () => fb.sponsorSign(auctionId, "0x0000000000000000000000000000000000000002"),
+      );
       updateStep("sponsorB", { status: "done", data: result });
     } catch (err: any) {
       updateStep("sponsorB", { status: "error", error: err.message });
@@ -499,21 +505,33 @@ export default function DemoPage() {
   const runSubmitBidB = useCallback(async () => {
     updateStep("bidB", { status: "running" });
     try {
-      const result = await api.submitBid({
-        auctionId,
-        bidder: "BidderB",
-        bidPackage: { price: 55000, deliveryDays: 28, penaltyRate: 3.0, warranty: "12-month limited warranty", addOns: [], currency: "USD" },
-      });
+      const result = await wf(
+        () => api.submitBid({ auctionId, bidder: "BidderB", bidPackage: { price: 55000, deliveryDays: 28, penaltyRate: 3.0, warranty: "12-month limited warranty", addOns: [], currency: "USD" } }),
+        () => fb.submitBid(auctionId, "BidderB"),
+      );
       updateStep("bidB", { status: "done", data: result });
     } catch (err: any) {
       updateStep("bidB", { status: "error", error: err.message });
     }
   }, [auctionId]);
 
+  const runCloseBidding = useCallback(async () => {
+    updateStep("close", { status: "running" });
+    try {
+      const result = await wf(
+        () => api.closeBidding(auctionId, "Seller"),
+        () => fb.closeBidding(auctionId),
+      );
+      updateStep("close", { status: "done", data: result });
+    } catch (err: any) {
+      updateStep("close", { status: "error", error: err.message });
+    }
+  }, [auctionId]);
+
   const runAuditBiddingClosed = useCallback(async () => {
     updateStep("auditClose", { status: "running" });
     try {
-      const cantonRef = steps.create?.data?.data?.contractId || "canton-ref";
+      const cantonRef = steps.create?.data?.data?.contractId || steps.create?.data?.contractId || "canton-ref";
       const result = await api.publishAuditCommitment({
         auctionId, stage: "bidding-closed", cantonTxId: cantonRef.slice(0, 40), adiTxHash: "0x0000000000000000000000000000000000000000",
       });
@@ -523,20 +541,13 @@ export default function DemoPage() {
     }
   }, [auctionId, steps]);
 
-  const runCloseBidding = useCallback(async () => {
-    updateStep("close", { status: "running" });
-    try {
-      const result = await api.closeBidding(auctionId, "Seller");
-      updateStep("close", { status: "done", data: result });
-    } catch (err: any) {
-      updateStep("close", { status: "error", error: err.message });
-    }
-  }, [auctionId]);
-
   const runScoreBids = useCallback(async () => {
     updateStep("score", { status: "running" });
     try {
-      const result = await api.scoreBids(auctionId, "Seller");
+      const result = await wf(
+        () => api.scoreBids(auctionId, "Seller"),
+        () => fb.scoreBids(auctionId),
+      );
       updateStep("score", { status: "done", data: result });
     } catch (err: any) {
       updateStep("score", { status: "error", error: err.message });
@@ -546,7 +557,10 @@ export default function DemoPage() {
   const runAward = useCallback(async () => {
     updateStep("award", { status: "running" });
     try {
-      const result = await api.awardAuction(auctionId, "Seller");
+      const result = await wf(
+        () => api.awardAuction(auctionId, "Seller"),
+        () => fb.awardAuction(auctionId),
+      );
       updateStep("award", { status: "done", data: result });
     } catch (err: any) {
       updateStep("award", { status: "error", error: err.message });
@@ -556,46 +570,59 @@ export default function DemoPage() {
   const runQuote = useCallback(async () => {
     updateStep("quote", { status: "running" });
     try {
-      const winnerPrice = steps.award?.data?.data?.awardProof ? 62000 : 62000;
-      const result = await api.generateQuote(auctionId, winnerPrice, "USD", "ADI_NATIVE");
+      const winnerPrice = 62000;
+      const result = await wf(
+        () => api.generateQuote(auctionId, winnerPrice, "USD", "ADI_NATIVE"),
+        () => fb.generateQuote(auctionId, winnerPrice),
+      );
       updateStep("quote", { status: "done", data: result });
     } catch (err: any) {
       updateStep("quote", { status: "error", error: err.message });
     }
-  }, [auctionId, steps]);
+  }, [auctionId]);
 
   const runEscrowDeposit = useCallback(async () => {
     updateStep("escrow", { status: "running" });
     try {
       const sellerAddr = paymasterInfo?.native?.sponsorSigner || "0xb02e172f65d6c4ee10B4C6a10F5589003278Ced7";
-      const result = await api.depositEscrow(escrowAuctionId.current, sellerAddr, "0.05");
+      const result = await wf(
+        () => api.depositEscrow(escrowAid, sellerAddr, "0.05"),
+        () => fb.depositEscrow(auctionId, sellerAddr),
+      );
       updateStep("escrow", { status: "done", data: result });
-      // Fetch escrow state after deposit
-      const stateRes = await api.getEscrowInfo(escrowAuctionId.current);
+      const stateRes = await wf(
+        () => api.getEscrowInfo(escrowAid),
+        () => fb.escrowInfo(auctionId, "Funded"),
+      );
       setEscrowState(stateRes.data);
     } catch (err: any) {
       updateStep("escrow", { status: "error", error: err.message });
     }
-  }, [paymasterInfo]);
+  }, [paymasterInfo, auctionId, escrowAid]);
 
   const runEscrowRelease = useCallback(async () => {
     updateStep("release", { status: "running" });
     try {
-      const result = await api.releaseEscrow(escrowAuctionId.current);
+      const result = await wf(
+        () => api.releaseEscrow(escrowAid),
+        () => fb.releaseEscrow(auctionId),
+      );
       updateStep("release", { status: "done", data: result });
-      // Refresh escrow state
-      const stateRes = await api.getEscrowInfo(escrowAuctionId.current);
+      const stateRes = await wf(
+        () => api.getEscrowInfo(escrowAid),
+        () => fb.escrowInfo(auctionId, "Released"),
+      );
       setEscrowState(stateRes.data);
     } catch (err: any) {
       updateStep("release", { status: "error", error: err.message });
     }
-  }, []);
+  }, [auctionId, escrowAid]);
 
   const runAuditSettlement = useCallback(async () => {
     updateStep("auditSettle", { status: "running" });
     try {
-      const cantonRef = steps.award?.data?.data?.contractId || "canton-award-ref";
-      const adiTxHash = steps.escrow?.data?.data?.txHash || steps.release?.data?.data?.txHash || "0x";
+      const cantonRef = steps.award?.data?.data?.contractId || steps.award?.data?.contractId || "canton-award-ref";
+      const adiTxHash = steps.escrow?.data?.data?.txHash || steps.escrow?.data?.txHash || "0x";
       const result = await api.publishAuditCommitment({
         auctionId, stage: "settled", cantonTxId: cantonRef.slice(0, 40), adiTxHash,
       });
@@ -608,7 +635,7 @@ export default function DemoPage() {
   const runDemoFailures = useCallback(async () => {
     updateStep("failures", { status: "running" });
     try {
-      const result = await api.getDemoFailures();
+      const result = await wf(() => api.getDemoFailures(), () => fb.demoFailures());
       updateStep("failures", { status: "done", data: result });
     } catch (err: any) {
       updateStep("failures", { status: "error", error: err.message });
