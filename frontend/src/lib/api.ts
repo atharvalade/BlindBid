@@ -4,7 +4,7 @@
  * ALL data is live: Canton Sandbox, ADI Anvil Fork, Hedera Testnet.
  */
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "";
+const BASE = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
 
 async function post(path: string, body?: any) {
   const res = await fetch(`${BASE}${path}`, {
