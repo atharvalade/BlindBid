@@ -1,0 +1,259 @@
+-- | Core Auction Contract
+-- Models the full lifecycle of a private B2B blind auction.
+-- Party-based visibility is the KEY differentiator vs public chains.
+module BlindBid.Auction where
+
+import BlindBid.Types
+
+-- | The main auction contract — created by the Seller.
+-- Bidders are observers but can only see allowed fields.
+template Auction
+  with
+    seller       : Party
+    auctionId    : Text
+    itemDesc     : Text
+    constraints  : Text        -- JSON-serialized constraints
+    weights      : ScoringWeights
+    bidders      : [Party]     -- Invited bidders
+    auditor      : Optional Party
+    stage        : AuctionStage
+    createdAt    : Time
+    biddingDeadline : Time
+  where
+    signatory seller
+    observer (bidders <> optional [] (\a -> [a]) auditor)
+
+    -- | Seller opens bidding window
+    choice OpenBidding : ContractId Auction
+      controller seller
+      do
+        assertMsg "Auction must be in Created stage" (stage == Created)
+        create this with stage = BiddingOpen
+
+    -- | Seller closes bidding window
+    choice CloseBidding : ContractId Auction
+      controller seller
+      do
+        assertMsg "Auction must be in BiddingOpen stage" (stage == BiddingOpen)
+        create this with stage = BiddingClosed
+
+    -- | Seller moves to scoring phase
+    choice StartScoring : ContractId Auction
+      controller seller
+      do
+        assertMsg "Auction must be in BiddingClosed stage" (stage == BiddingClosed)
+        create this with stage = Scoring
+
+    -- | Seller awards the auction to a winner
+    choice AwardAuction : ContractId AwardedAuction
+      with
+        winner : Party
+        awardProof : AwardProof
+      controller seller
+      do
+        assertMsg "Auction must be in Scoring stage" (stage == Scoring)
+        assertMsg "Winner must be a bidder" (winner `elem` bidders)
+        create AwardedAuction with
+          seller
+          auctionId
+          winner
+          awardProof
+          auditor
+          conditions = []
+          allConditionsMet = False
+          escrowInstruction = None
+          stage = Awarded
+          bidders = (filter (/= winner) bidders)
+
+    -- | Non-winning bidder can see they were not selected
+    -- but CANNOT see the winning bid details
+    nonconsuming choice QueryAuctionStage : AuctionStage
+      with
+        querier : Party
+      controller querier
+      do
+        assertMsg "Must be a participant" (querier `elem` bidders || querier == seller)
+        return stage
+
+-- | A sealed bid submission — only the bidder and seller can see the content.
+-- Other bidders CANNOT see this contract at all.
+template SealedBid
+  with
+    bidder     : Party
+    seller     : Party
+    auctionId  : Text
+    bidPackage : BidPackage
+    submittedAt : Time
+  where
+    signatory bidder
+    observer seller
+
+    -- Only bidder and seller can see this!
+    -- Other bidders have NO visibility — Canton enforces this.
+
+    -- | Seller can score this bid (private operation)
+    choice ScoreBid : ContractId ScoredBid
+      with
+        score : BidScore
+        reputationScore : Decimal
+      controller seller
+      do create ScoredBid with
+          bidder
+          seller
+          auctionId
+          bidPackage
+          score
+          scoredAt = submittedAt  -- simplified for demo
+
+-- | A scored bid — visible only to seller.
+-- Bidder can see their OWN score but NOT other bidders' scores.
+template ScoredBid
+  with
+    bidder     : Party
+    seller     : Party
+    auctionId  : Text
+    bidPackage : BidPackage
+    score      : BidScore
+    scoredAt   : Time
+  where
+    signatory seller
+    observer bidder
+
+    -- Bidder sees their own score
+    -- Other bidders see NOTHING — privacy by design
+
+-- | The awarded auction contract — post-award lifecycle.
+template AwardedAuction
+  with
+    seller       : Party
+    auctionId    : Text
+    winner       : Party
+    awardProof   : AwardProof
+    auditor      : Optional Party
+    conditions   : [AwardCondition]
+    allConditionsMet : Bool
+    escrowInstruction : Optional EscrowInstruction
+    stage        : AuctionStage
+    bidders      : [Party]  -- losing bidders (observers for fairness proof)
+  where
+    signatory seller
+    observer ([winner] <> bidders <> optional [] (\a -> [a]) auditor)
+
+    -- | Winner and losing bidders can see the AwardProof
+    -- but NOT the actual bid values or scores
+
+    -- | Seller adds conditions to the award (KYC, delivery, etc.)
+    choice AddCondition : ContractId AwardedAuction
+      with
+        condition : AwardCondition
+      controller seller
+      do
+        assertMsg "Auction must be in Awarded stage" (stage == Awarded)
+        create this with
+          conditions = conditions <> [condition]
+          stage = ConditionsChecking
+
+    -- | Seller marks a condition as met
+    choice MarkConditionMet : ContractId AwardedAuction
+      with
+        conditionId : Text
+        verifier    : Party
+        verifiedAt  : Time
+      controller seller
+      do
+        let updatedConditions = map (\c ->
+              if c.conditionId == conditionId
+                then c with
+                  isMet = True
+                  verifiedBy = Some verifier
+                  verifiedAt = Some verifiedAt
+                else c) conditions
+        let allMet = all (\c -> c.isMet) updatedConditions
+        create this with
+          conditions = updatedConditions
+          allConditionsMet = allMet
+
+    -- | Seller triggers escrow release (calls ADI)
+    choice TriggerRelease : ContractId AwardedAuction
+      with
+        instruction : EscrowInstruction
+      controller seller
+      do
+        assertMsg "All conditions must be met" allConditionsMet
+        create this with
+          escrowInstruction = Some instruction
+          stage = Settled
+
+    -- | Seller triggers escrow refund
+    choice TriggerRefund : ContractId AwardedAuction
+      with
+        instruction : EscrowInstruction
+      controller seller
+      do
+        create this with
+          escrowInstruction = Some instruction
+          stage = Settled
+
+    -- | Any party can raise a dispute
+    choice RaiseDispute : ContractId DisputedAuction
+      with
+        disputant : Party
+        reason    : Text
+      controller disputant
+      do
+        assertMsg "Must be a participant" (disputant == winner || disputant == seller)
+        create DisputedAuction with
+          seller
+          auctionId
+          winner
+          auditor
+          disputant
+          reason
+          evidence = []
+          resolution = None
+
+    -- | Two-man rule: Auditor co-signs the award
+    -- (Only when auditor is configured)
+    choice AuditorCoSign : ContractId AwardedAuction
+      with
+        auditParty : Party
+      controller auditParty
+      do
+        assertMsg "Must be the auditor" (Some auditParty == auditor)
+        -- In a full implementation, this would produce a co-signed contract
+        return =<< create this
+
+-- | Dispute resolution contract — only involved parties can see evidence.
+template DisputedAuction
+  with
+    seller      : Party
+    auctionId   : Text
+    winner      : Party
+    auditor     : Optional Party
+    disputant   : Party
+    reason      : Text
+    evidence    : [Text]     -- Evidence documents (references)
+    resolution  : Optional Text
+  where
+    signatory disputant
+    observer ([seller, winner] <> optional [] (\a -> [a]) auditor)
+
+    -- | Either party submits evidence
+    choice SubmitEvidence : ContractId DisputedAuction
+      with
+        submitter  : Party
+        evidenceDoc : Text
+      controller submitter
+      do
+        assertMsg "Must be a party" (submitter == seller || submitter == winner || Some submitter == auditor)
+        create this with evidence = evidence <> [evidenceDoc]
+
+    -- | Auditor or seller resolves the dispute
+    choice ResolveDispute : ContractId DisputedAuction
+      with
+        resolver   : Party
+        decision   : Text
+      controller resolver
+      do
+        assertMsg "Must be seller or auditor" (resolver == seller || Some resolver == auditor)
+        create this with resolution = Some decision
