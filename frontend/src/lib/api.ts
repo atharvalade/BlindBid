@@ -1,10 +1,10 @@
 /**
- * API client — calls our real backend (proxied via Next.js rewrites).
+ * API client — calls our real backend directly.
  * Every function here hits a tested, working endpoint.
  * ALL data is live: Canton Sandbox, ADI Anvil Fork, Hedera Testnet.
  */
 
-const BASE = "";  // proxied by next.config.js rewrites
+const BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 async function post(path: string, body?: any) {
   const res = await fetch(`${BASE}${path}`, {
