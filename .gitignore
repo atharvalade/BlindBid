@@ -1,0 +1,51 @@
+# ─── Dependencies ──────────────────────────────────────────────────────────────
+node_modules/
+package-lock.json
+
+# ─── Build outputs ─────────────────────────────────────────────────────────────
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# ─── Foundry / Solidity ───────────────────────────────────────────────────────
+adi-paymaster/cache/
+adi-paymaster/out/
+adi-paymaster/broadcast/
+adi-paymaster/lib/
+adi-paymaster/foundry.lock
+
+# ─── Canton / Daml ─────────────────────────────────────────────────────────────
+canton-daml/.daml/
+canton-daml/log/
+canton-daml/navigator.log
+canton-daml/*.dar
+canton/
+
+# ─── Environment & secrets ────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!env.example
+credentials/
+
+# ─── IDE / OS ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── Misc ──────────────────────────────────────────────────────────────────────
+*.tgz
+*.tar.gz
+.vercel
+.turbo
+Hedera.md
