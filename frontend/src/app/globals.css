@@ -1,0 +1,208 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #060609;
+  --bg-secondary: #0c0c14;
+  --bg-card: #12121c;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --text-primary: #eeeef3;
+  --text-secondary: #8888a0;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══ Glass ════════════════════════════════════════════════════════════════ */
+.glass {
+  background: rgba(14, 14, 24, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.glass-strong {
+  background: rgba(10, 10, 18, 0.92);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ═══ Gradient text ═══════════════════════════════════════════════════════ */
+.gradient-text {
+  background: linear-gradient(135deg, #6d8cff 0%, #b76dff 50%, #4ade80 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gradient-text-warm {
+  background: linear-gradient(135deg, #f97316 0%, #ef4444 50%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ═══ Hero BG — pure CSS, zero JS ════════════════════════════════════════ */
+.hero-bg {
+  position: relative;
+  background: #060609;
+}
+.hero-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 40%, rgba(99,102,241,0.13) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 75% 25%, rgba(147,51,234,0.09) 0%, transparent 70%),
+    radial-gradient(ellipse 35% 35% at 25% 70%, rgba(34,197,94,0.06) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ═══ Noise texture overlay — adds depth without GPU cost ════════════════ */
+.noise::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ═══ Section BG variants ════════════════════════════════════════════════ */
+.section-dark {
+  background: linear-gradient(180deg, var(--bg-primary) 0%, #080812 100%);
+}
+.section-accent {
+  background:
+    radial-gradient(ellipse 60% 40% at 30% 50%, rgba(99,102,241,0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 50% at 70% 50%, rgba(147,51,234,0.05) 0%, transparent 70%),
+    var(--bg-primary);
+}
+.mesh-gradient {
+  background:
+    radial-gradient(at 27% 37%, rgba(76,110,245,0.1) 0px, transparent 50%),
+    radial-gradient(at 97% 21%, rgba(168,85,247,0.08) 0px, transparent 50%),
+    radial-gradient(at 52% 99%, rgba(34,197,94,0.06) 0px, transparent 50%),
+    var(--bg-primary);
+}
+
+/* ═══ Animated gradient bg — used on demo/privacy/audit (not landing) ═══ */
+.animated-gradient-bg {
+  background: linear-gradient(-45deg, #0a0a18, #130a22, #0a1420, #0a200f);
+  background-size: 400% 400%;
+  animation: gradient-shift 20s ease infinite;
+}
+@keyframes gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ═══ Grid pattern ═══════════════════════════════════════════════════════ */
+.grid-pattern {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+/* ═══ Glow border on hover ═══════════════════════════════════════════════ */
+.glow-hover {
+  transition: box-shadow 0.4s ease, border-color 0.4s ease;
+}
+.glow-hover:hover {
+  box-shadow: 0 0 40px -12px rgba(99,102,241,0.25);
+  border-color: rgba(99,102,241,0.15);
+}
+
+/* ═══ Scroll fade-in — CSS-only, no JS needed ════════════════════════════ */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fade-up 0.7s ease-out both;
+}
+
+/* ═══ Glow effects ═══════════════════════════════════════════════════════ */
+.glow-blue   { box-shadow: 0 0 30px rgba(76,110,245,0.3); }
+.glow-green  { box-shadow: 0 0 30px rgba(34,197,94,0.3); }
+.glow-purple { box-shadow: 0 0 30px rgba(168,85,247,0.3); }
+.glow-orange { box-shadow: 0 0 30px rgba(249,115,22,0.3); }
+
+/* ═══ Scrollbar ══════════════════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+/* ═══ Live dot ═══════════════════════════════════════════════════════════ */
+.live-dot {
+  width: 8px; height: 8px;
+  background: #22c55e;
+  border-radius: 50%;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+  50%      { opacity: 0.7; box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+}
+
+/* ═══ Code block ═════════════════════════════════════════════════════════ */
+.code-block {
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+  color: #d0d0dc;
+}
+
+/* ═══ Party colors ═══════════════════════════════════════════════════════ */
+.party-seller  { color: #748ffc; }
+.party-bidderA { color: #4ade80; }
+.party-bidderB { color: #fb923c; }
+.party-auditor { color: #c084fc; }
+
+.party-bg-seller  { background: rgba(76,110,245,0.08); border-color: rgba(76,110,245,0.2); }
+.party-bg-bidderA { background: rgba(34,197,94,0.08);  border-color: rgba(34,197,94,0.2); }
+.party-bg-bidderB { background: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.2); }
+.party-bg-auditor { background: rgba(168,85,247,0.08); border-color: rgba(168,85,247,0.2); }
+
+/* ═══ Subtle shine on cards ══════════════════════════════════════════════ */
+.card-shine {
+  position: relative;
+  overflow: hidden;
+}
+.card-shine::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.02), transparent);
+  transition: left 0.5s ease;
+}
+.card-shine:hover::before {
+  left: 100%;
+}
+
+/* ═══ Step connector line ════════════════════════════════════════════════ */
+.step-line {
+  position: absolute;
+  left: 20px; top: 40px; bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, rgba(76,110,245,0.5), rgba(168,85,247,0.5));
+}
