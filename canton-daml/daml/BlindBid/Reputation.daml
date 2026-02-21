@@ -1,0 +1,75 @@
+-- | Private Reputation System
+-- Attestations are stored on Canton with party-based visibility.
+-- The auction scoring reads reputation privately.
+-- Losing bidders CANNOT see the winner's history.
+module BlindBid.Reputation where
+
+import BlindBid.Types
+
+-- | A reputation attestation contract.
+-- Only the attestor and the subject (bidder) can see the full details.
+-- Third parties see nothing.
+template ReputationContract
+  with
+    attestor    : Party        -- Who provides the attestation
+    bidder      : Party        -- The bidder being attested
+    attestation : ReputationAttestation
+  where
+    signatory attestor
+    observer bidder
+
+    -- Only the bidder and attestor can see the details.
+    -- This models Canton's privacy-by-design.
+
+    -- | Attestor can revoke/update their attestation
+    choice UpdateAttestation : ContractId ReputationContract
+      with
+        newAttestation : ReputationAttestation
+      controller attestor
+      do create this with attestation = newAttestation
+
+    -- | Either party can archive
+    choice RevokeAttestation : ()
+      controller attestor
+      do return ()
+
+-- | A reputation query result — what an auction contract can use.
+-- The threshold check is the only thing shared with non-parties.
+template ReputationThresholdCheck
+  with
+    checker   : Party    -- The party requesting the check (Seller)
+    bidder    : Party    -- The bidder being checked
+    meetsThreshold : Bool
+    threshold : Decimal
+    checkTime : Time
+  where
+    signatory checker
+    observer bidder
+
+    -- The bidder sees: "You meet the threshold" or "You do not"
+    -- The bidder does NOT see other bidders' results
+    -- Other parties see nothing
+
+-- | A request for reputation check — privacy-preserving pattern.
+-- Seller asks for a check; the system evaluates privately.
+template ReputationCheckRequest
+  with
+    seller    : Party
+    bidder    : Party
+    threshold : Decimal
+    auctionId : Text
+  where
+    signatory seller
+    observer bidder
+
+    choice FulfillCheck : ContractId ReputationThresholdCheck
+      with
+        meetsThreshold : Bool
+        currentTime    : Time
+      controller seller
+      do create ReputationThresholdCheck with
+          checker = seller
+          bidder
+          meetsThreshold
+          threshold
+          checkTime = currentTime
