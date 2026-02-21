@@ -46,16 +46,18 @@ app.use(
   }
 );
 
-// ─── Start ────────────────────────────────────────────────────────────────────
-app.listen(config.server.port, () => {
-  console.log(`\n🚀 BlindBid backend running on port ${config.server.port}`);
-  console.log(`   ENV  : ${config.server.env}`);
-  console.log(`   ADI  : ${config.adi.rpcUrl}`);
-  console.log(`   Entry: ${config.adi.entryPointV07}`);
-  console.log(`   HBAR : ${config.hedera.accountId}`);
-  console.log(`   PM(N): ${config.contracts.nativePaymaster || "not deployed"}`);
-  console.log(`   PM(E): ${config.contracts.erc20Paymaster || "not deployed"}`);
-  console.log(`   ESC  : ${config.contracts.escrow || "not deployed"}\n`);
-});
+// ─── Start (skip when running as Vercel serverless function) ─────────────────
+if (!process.env.VERCEL) {
+  app.listen(config.server.port, () => {
+    console.log(`\n🚀 BlindBid backend running on port ${config.server.port}`);
+    console.log(`   ENV  : ${config.server.env}`);
+    console.log(`   ADI  : ${config.adi.rpcUrl}`);
+    console.log(`   Entry: ${config.adi.entryPointV07}`);
+    console.log(`   HBAR : ${config.hedera.accountId}`);
+    console.log(`   PM(N): ${config.contracts.nativePaymaster || "not deployed"}`);
+    console.log(`   PM(E): ${config.contracts.erc20Paymaster || "not deployed"}`);
+    console.log(`   ESC  : ${config.contracts.escrow || "not deployed"}\n`);
+  });
+}
 
 export default app;
